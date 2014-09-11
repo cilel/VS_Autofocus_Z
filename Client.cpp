@@ -583,9 +583,12 @@ vpColVector semPosCont(Mat curImage, Mat desImage, int iter)
             Jg.resize(1);
             //Jdg.resize(1);
 
+            int nbrJgs=Jgs.getRows()-sI.nbrNoise;
+
             for (int m=0; m<Jgs.getRows();m++)
               Jg[0]+=fabs(Jgs[m][0]);//fabs
 
+            Jg[0]= Jg[0]/nbrJgs;
 
            // cout << "Jg=" << Jg << endl;
            // cout << "Jdg=" << Jdg << endl;
@@ -595,7 +598,9 @@ vpColVector semPosCont(Mat curImage, Mat desImage, int iter)
 
             double inv_Jg = 1/Jg[0];
             vgd_p = vgd;
-            vgd = sign*fabs(1e4*inv_Jg);
+            vgd = sign*fabs(1e-1*inv_Jg);
+
+            // condition of stop
             if ((fabs(vgd_p-vgd)<1e-9 || vgd_p == 0)&& iter > 70 )
             {
                 vgd =0;

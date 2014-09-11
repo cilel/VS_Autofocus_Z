@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_layout_file>
 	<ActiveTarget name="Debug" />
+	<File name="CLIENTFUNCS.cpp" open="1" top="0" tabpos="2">
+		<Cursor position="94" topLine="0" />
+	</File>
+	<File name="Client.cpp" open="1" top="1" tabpos="1">
+		<Cursor position="2946" topLine="33" />
+	</File>
 </CodeBlocks_layout_file>

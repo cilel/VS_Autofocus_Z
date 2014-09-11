@@ -45,6 +45,7 @@
 #include <visp/vpMatrix.h>
 #include <visp/vpBasicFeature.h>
 #include <visp/vpImage.h>
+#include <list>
 
 
 
@@ -126,10 +127,15 @@ class VISP_EXPORT npFeatureLuminance : public vpBasicFeature
   npLuminance *pixInfo ;
   int  firstTimeIn  ;
 
+  bool denoise; //flag for remove the charging of electroin (white part, 255)
+  int noiseLevel; // tolerance of noise level, 254 maximum
+  std::list<int> noisePosition; // list to save the position of the noise
+
+
  public:
   void buildFrom(vpImage<unsigned char> &I) ;
 
-  vpImage<double> imG, imIx, imIy, imGxy ;
+  vpImage<double> imG, imIx, imIy, imGxy, imNoise;
 
 
 
@@ -174,6 +180,8 @@ public:
   double S_c; //current feature
   double S_p; //previous feature
 
+  int nbrNoise; // number of pixels that is noise
+
   /*
     vpBasicFeature method instantiation
   */
@@ -214,8 +222,8 @@ public:
   vpColVector error(const unsigned int select = FEATURE_ALL)  ;
 
 
-private:
-
+//private:
+public:
   void  matrixConvert(vpMatrix &src, cv::Mat &dest);
   void  matrixConvert(vpImage<double> &src, cv::Mat &dest);
   void  matrixConvert(cv::Mat& src, vpMatrix& dest);

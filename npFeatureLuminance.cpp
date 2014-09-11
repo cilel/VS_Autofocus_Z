@@ -70,15 +70,16 @@ npFeatureLuminance::init(unsigned int _nbr, unsigned int _nbc, double _Z, projec
   imIy.resize(nbr,nbc) ;
   imG.resize(nbr,nbc) ;
   imGxy.resize(nbr,nbc) ;//for display gradient
+  imNoise.resize(nbr,nbc) ;//for display noise (electron charging)
 
   s.resize(dim_s) ;
   sg.resize(dim_s);
-  
+
   if (pixInfo != NULL)
     delete [] pixInfo;
 
   pixInfo = new npLuminance[dim_s] ;
-  
+
   Z_fl = _Z ;
   pjModel = projModel;
 
@@ -86,9 +87,11 @@ npFeatureLuminance::init(unsigned int _nbr, unsigned int _nbc, double _Z, projec
 
   S_c = 1;
   S_p = 0;
+
+  denoise = true; // remove the noise or not
 }
 
-/*! 
+/*!
   Default constructor that build a visual feature.
 */
 npFeatureLuminance::npFeatureLuminance() : vpBasicFeature()
@@ -102,7 +105,7 @@ npFeatureLuminance::npFeatureLuminance() : vpBasicFeature()
     init() ;
 }
 
-/*! 
+/*!
   Default destructor.
 */
 npFeatureLuminance::~npFeatureLuminance()
@@ -168,10 +171,8 @@ npFeatureLuminance::get_sg_sum()
     for (int m=0; m<sg.size();m++)
         S_g+= abs(sg[m]);
 
-    return S_g;
+    return S_g/(sg.size()-nbrNoise);
 }
-
-
 
 
 void
@@ -222,6 +223,7 @@ npFeatureLuminance::matrixConvert(vpImage<double> &src, cv::Mat& dest)
 }
 
 
+
 void
 npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
 {
@@ -232,19 +234,24 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
   double py = cam.get_py() ;
   double m = -15;//a coefficient which depends on the sensor(diamter of aperture, distance between image plane and lens, focus distance...);
 
+  noiseLevel = I.getMaxValue()-1;
+  //cout << "noise_level=" << noise_level << endl;
+
   if (firstTimeIn==0)
-    { 
+    {
       firstTimeIn=1 ;
       l =0 ;
     for (unsigned int i=bord; i < nbr-bord ; i++)
 	{
 	  //   cout << i << endl ;
 	  for (unsigned int j = bord ; j < nbc-bord; j++)
-	    {	double x=0,y=0;
+        {
+
+          double x=0,y=0;
           vpPixelMeterConversion::convertPointWithoutDistortion(cam,
 						   i, j,
 						   y, x)  ;
-	    
+
 	      pixInfo[l].x = x;
 	      pixInfo[l].y = y;
           pixInfo[l].Z_l = Z_fl ;
@@ -279,7 +286,7 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
 // double sigma_8_inv = sigma_2_inv*sigma_3_inv*sigma_3_inv;
 // double sigma_2 = sigma*sigma;
  const double pi_inv = 1/3.1415926;
- double Z_2_inv = 1/(Z_fl*Z_fl);
+ //double Z_2_inv = 1/(Z_fl*Z_fl);
 
  //cout << sigma << endl;
  //cout << "sigma_inverse_sq=" << sigma_inverse_sq << endl;
@@ -314,11 +321,14 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
   //   cout << i << endl ;
     for (int j = bord ; j < nbc-bord; j++)
     {
+
+      imGxy[i][j] = vpMath::sqr(Ix) + vpMath::sqr(Iy) ;
+
       // cout << dim_s <<" " <<l <<"  " <<i << "  " << j <<endl ;
       Ix =  imIx[i][j] ;
       Iy =  imIy[i][j] ;
 
-      sg[l] = ( vpMath::sqr(Ix) + vpMath::sqr(Iy) ) ;//sqrt
+
       //imGxy[i][j] = sqrt( vpMath::sqr(Ix) + vpMath::sqr(Iy) ) ;
       Ixx =  vpImageFilter::derivativeFilterX(imIx,i,j) ;
       Ixy =  vpImageFilter::derivativeFilterY(imIx,i,j) ;
@@ -367,12 +377,28 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
 */
      // cout << "Ixs, Iys = " << pixInfo[l].Ixs << "\t" << pixInfo[l].Iys  <<endl;
 
-      imGxy[i][j] = vpMath::sqr(Ix) + vpMath::sqr(Iy) ;
+      sg[l] = ( vpMath::sqr(Ix) + vpMath::sqr(Iy) ) ;//sqrt
+
+
+      // detection of noise (pixels with maximum gris level)
+      if ((int)I[i][j]>noiseLevel && denoise)
+      {
+          imNoise[i][j]=255;
+          noisePosition.push_back(l);
+          sg[l]=0;
+      }
+      else
+          imNoise[i][j]=0;
 
       l++;
-
     }
 }
+
+  if (denoise)
+    nbrNoise = noisePosition.size();
+  else
+      nbrNoise = 0;
+
   //cout << "max[l]=" << l << endl;
 
   cv::filter2D(cvimIx,cvIxs,-1,cvIuv);
@@ -393,6 +419,7 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
   {
     for (int j = bord ; j < nbc-bord; j++)
     {
+
         pixInfo[l].Ixs = mIxs[i][j];
         pixInfo[l].Iys = mIys[i][j];
     //    pixInfo[l].Ixss = mIxss[i][j];
@@ -418,7 +445,7 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
   cout << "nbc=" << nbc << endl;
 */
 
-  if(vf_Z==NormalizedVariance)
+ /* if(vf_Z==NormalizedVariance)
   {
       //For Normalized variance
       double sum=0;
@@ -451,7 +478,7 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
             //cout << "sg[l]=" << sg[l] << endl;
             l++;
       }
-  }
+  }*/
 
   //For luminance
   l= 0 ;
@@ -460,12 +487,13 @@ npFeatureLuminance::buildFrom(vpImage<unsigned char> &I)
       //   cout << i << endl ;
       for (unsigned int j = bord ; j < nbc-bord; j++)
 	{
+
 	  // cout << dim_s <<" " <<l <<"  " <<i << "  " << j <<endl ;
       Ix =  px * vpImageFilter::derivativeFilterX(I,i,j) ;
 	  Iy =  py * vpImageFilter::derivativeFilterY(I,i,j) ;
-	  
+
 	  // Calcul de Z
-	  
+
 	  pixInfo[l].I  =  I[i][j] ;
 	  s[l]  =  I[i][j] ;
       pixInfo[l].Ix  = Ix;
@@ -544,6 +572,9 @@ npFeatureLuminance::interaction(vpMatrix &L)
         Lg.resize(dim_s,6);
         Ldg.resize(dim_s,6);
 
+        std::list<int>::iterator it;
+        it=noisePosition.begin();
+
         //CostFunctionSg=0;
 
       for(unsigned int m = 0; m< L.getRows(); m++)
@@ -576,6 +607,14 @@ npFeatureLuminance::interaction(vpMatrix &L)
           double B = ( Ixy*Ix_g+Iyy*Iy_g );
           double D = (Ix*Ixs +Iy*Iys); // maximize image gradient as cost function => mimimize derivative of image gradient
       //    double E = (Ixs*Ixs+Ix*Ixss +Iys*Iys+Iy*Iyss); // derivative of D;
+
+          int noiseId = *it; //here is the electron charging, remove it!
+          //cout << "noiseId= " << noiseId << endl;
+          if (m==noiseId && denoise)
+          {
+              D=0;
+              it++;
+          }
 
 /*
           if(m%20000==0)
@@ -616,7 +655,7 @@ npFeatureLuminance::interaction(vpMatrix &L)
               //Lz[m] = Lg[m][2];
               //CostFunctionSg += (A+B);
               //cout << "CostFunctionLz="<<CostFunctionSg << endl;
-          } 
+          }
           else if(vf_Z==NormalizedVariance)
           {
               Lg[m][0] = 0;
@@ -668,7 +707,7 @@ vpMatrix  npFeatureLuminance::interaction(const unsigned int /* select */)
 
 /*!
   Compute the error \f$ (I-I^*)\f$ between the current and the desired
- 
+
   \param s_star : Desired visual feature.
   \param e : Error between the current and the desired features.
 
@@ -708,7 +747,7 @@ npFeatureLuminance::sg_error(const vpColVector &sg_star,
 
 /*!
   Compute the error \f$ (I-I^*)\f$ between the current and the desired
- 
+
   \param s_star : Desired visual feature.
   \param select : Not used.
 
@@ -718,9 +757,9 @@ npFeatureLuminance::error(const vpBasicFeature &s_star,
 			  const unsigned int /* select */)
 {
   /* static */ vpColVector e ; // warning C4640: 'e' : construction of local static object is not thread-safe
-  
+
   error(s_star, e) ;
-  
+
   return e ;
 
 }
